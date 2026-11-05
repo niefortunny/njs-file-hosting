@@ -43,7 +43,7 @@ git checkout -b feature/krotka-nazwa
 
 W opisie PR napiszcie, co kliknęliście albo jakie żądanie wysłaliście. Nie zmieniajcie kontraktu po cichu. `src/lib/types.ts` ruszacie tylko, gdy cała czwórka się zgodzi.
 
-Da się iść równolegle. Osoba od dysku i osoba od API umawiają się pierwsze na nazwach funkcji, reszta woła gotowe funkcje zamiast czytać katalog `data/` z komponentu.
+Cztery osoby, cztery ścieżki. Każda domyka swoje pliki i nie przepisuje cudzych. Wspólne są tylko `src/lib/types.ts` i sygnatury `saveFile` / `getFile`.
 
 ## Kontrakt
 
@@ -75,40 +75,48 @@ Nie róbcie listy plików. Kto nie ma linku, ten nie wie, że plik istnieje.
 
 ## Lista zadań
 
-Odhaczajcie punkt w tym pliku w tym samym PR, który go robi. Komponentów formularza i strony pliku nie przepisujcie.
+Odhaczacie punkt w tym samym PR, który go robi. Każdy rusza tylko swoje pliki.
 
-### Frontend
+### 1. Wrzuć plik — `feature/upload`
 
-- [x] Formularz wysyła `POST /api/upload` polem `file` (`XMLHttpRequest`, bo `fetch` nie daje postępu wysyłki)
+Od przycisku do pliku na dysku. Pliki: `src/components/upload-form.tsx`, `src/app/page.tsx`, `src/app/api/upload/route.ts`, funkcja `saveFile` w `src/lib/files.ts`.
+
+- [x] Formularz wysyła pole `file` przez `XMLHttpRequest` (postęp wysyłki)
 - [x] Przed wysyłką odrzuca brak pliku, pusty plik i plik ponad `MAX_FILE_BYTES`
 - [x] Przy błędzie pokazuje `error` z JSON, przy `201` link `origin + url` i kopiowanie
-- [x] Strona `/f/[id]` woła `getFile`; `null` to jeden komunikat dla braku i wygaśnięcia
-- [x] Przy metadanych: nazwa, rozmiar, data, odliczanie, kopiowanie, pobranie przez `<a href="/api/files/:id">`
+- [ ] `saveFile`: katalog `data/` (`fs.mkdir`, `recursive`), bajty w `data/<id>.bin`, JSON w `data/<id>.json`, najpierw plik tymczasowy, potem `rename`. Zapis przez `file.arrayBuffer()`, nie powyżej 100 MB
+- [ ] Id: `randomBytes(12).toString("base64url")`. Nazwę i „czy id jest bezpieczne” bierzecie od osoby 4, termin od osoby 3. Zanim te funkcje wejdą, nazwa to ostatni człon ścieżki, `expiresAt` to teraz + 24 godziny
+- [ ] Route: `formData()`, pole `file` jest `File`. Brak albo rozmiar `0` → `400`, ponad limit → `413`, sukces → `201` z `StoredFile` i `url: "/f/" + id`
+
+### 2. Otwórz i pobierz — `feature/download`
+
+Od linku do bajtów. Pliki: `src/components/file-panel.tsx`, `src/app/f/[id]/page.tsx`, `src/app/api/files/[id]/route.ts`, funkcja `getFile` w `src/lib/files.ts`.
+
+- [x] Strona woła `getFile`. `null` to jeden komunikat: link wygasł albo nigdy nie istniał
+- [x] Przy metadanych: nazwa, rozmiar, data, odliczanie, kopiowanie, `<a href="/api/files/:id">`
 - [x] Podgląd tylko dla JPEG, PNG, GIF i WebP
+- [ ] `getFile` czyta JSON i sprawdza, że plik bajtów leży obok. Złe id, brak albo miniony termin → `null` i skasowane pliki. Czy termin minął, mówi funkcja osoby 3. Czy id wolno złożyć w ścieżkę, mówi funkcja osoby 4
+- [ ] Route: `await context.params`, potem `getFile`. `null` → `404`. Inaczej strumień `createReadStream` + `Readable.toWeb`
+- [ ] Nagłówki pobrania bierzecie od osoby 4 (`Content-Disposition` i reszta). Zanim wejdą: `attachment`, `Content-Length`, `nosniff`, `Cache-Control: private, no-store`. HTML i SVG też jako załącznik
 
-### Dysk — gałąź `feature/storage`
+### 3. 24 godziny — `feature/lifetime`
 
-Plik: `src/lib/files.ts`. Typ z `src/lib/types.ts`, limit z `MAX_FILE_BYTES`. `getFile` już jest i zwraca `null`: podmień ciało, nie zmieniaj sygnatury. Dopisz `saveFile(file: File): Promise<StoredFile>`.
+Sam czas życia, bez formularza i bez route. Pliki: `src/lib/lifetime.ts`, `scripts/`. W `files.ts` dopisujecie tylko wywołania, nie ciało zapisu i odczytu.
 
-- [ ] Katalog `data/` przy zapisie (`fs.mkdir` z `recursive: true`), pliki poza `public/`
-- [ ] Id: `randomBytes(12).toString("base64url")`. Przy odczycie tylko `^[A-Za-z0-9_-]{16}$`, zanim złożycie ścieżkę
-- [ ] Nazwa: ostatni człon po `/` i `\`, bez znaków spoza liter, cyfr, kropki, spacji i myślnika. Pusta nazwa → `"plik"`
-- [ ] Bajty do `data/<id>.bin`, JSON do `data/<id>.json`. Najpierw plik tymczasowy, potem `rename`, na końcu JSON. `expiresAt` = teraz + 24 godziny
-- [ ] `getFile` czyta JSON. Po terminie albo bez bajtów kasuje oba pliki i zwraca `null`
-- [ ] Przy uploadzie kasuje z `data/` metadane, którym minął termin
-- [ ] Zapis przez `file.arrayBuffer()`. Powyżej 100 MB dopiero strumień, nie sam wyższy limit
-- [ ] Mały skrypt w `scripts/`: czysta funkcja „czy termin minął” na dacie z przeszłości i z przyszłości, odpalana przez `node`
+- [ ] `expiresAt(now)` → ISO, teraz + 24 godziny
+- [ ] `isExpired(expiresAt, now)` → minął albo data jest zła
+- [ ] `purgeExpired()` kasuje z `data/` pary `.bin` + `.json`, którym minął termin. Osoba 1 woła to na końcu `saveFile`
+- [ ] Osoba 2 w `getFile` woła `isExpired` i przy `true` kasuje oba pliki
+- [ ] `scripts/`: `node` sprawdza `isExpired` na dacie z przeszłości i z przyszłości, bez zapisu na dysk
 
-### API — gałąź `feature/api`
+### 4. Nazwa, id i limity — `feature/guards`
 
-Pliki: `src/app/api/upload/route.ts`, `src/app/api/files/[id]/route.ts`. Walidacja w route, zapis w `src/lib/files.ts`. Błędy zostają `{ error: string }`.
+Same reguły na granicy z internetem. Pliki: `src/lib/guards.ts`. W route dopisujecie tylko wywołania.
 
-- [ ] `formData()`, pole `file` jest `File`. Brak pola albo rozmiar `0` → `400`. Ponad `MAX_FILE_BYTES` → `413`
-- [ ] `content-length` wyraźnie ponad limit (z zapasem kilkudziesięciu KB na multipart) → `413` jeszcze przed `formData()`
-- [ ] Reszta idzie do `saveFile`, odpowiedź `201` z polami `StoredFile` i `url: "/f/" + id`
-- [ ] Pobranie: `await context.params`, potem `getFile`. `null` → `404`
-- [ ] Strumień `createReadStream` + `Readable.toWeb`, nagłówki `Content-Type`, `Content-Length`, `Content-Disposition: attachment` (`filename*`, UTF-8), `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`
-- [ ] HTML i SVG też schodzą jako załącznik
-- [ ] Limit liczby żądań z jednego IP, osobnym PR-em
+- [ ] `isValidId`: dokładnie 16 znaków `A-Za-z0-9_-`. Osoba 2 woła to, zanim złoży ścieżkę
+- [ ] `sanitizeName`: ostatni człon po `/` i `\`, znaki spoza liter, cyfr, kropki, spacji i myślnika wycięte, puste → `"plik"`. Osoba 1 woła to przy zapisie
+- [ ] `contentDisposition(name)`: `attachment`, nazwa w `filename*` jako UTF-8. Osoba 2 wstawia to w nagłówek pobrania
+- [ ] W upload route, zanim `formData()`: `content-length` wyraźnie ponad `MAX_FILE_BYTES` (zapas kilkudziesięciu KB na multipart) → `413`
+- [ ] Limit liczby żądań z jednego IP na `POST /api/upload` i `GET /api/files/:id`
 
-Kolejność: najpierw dysk (`getFile` i `saveFile`), potem API. Formularz już pokazuje `error` z odpowiedzi, także przy obecnym `501`.
+Osoba 1 i 2 mogą iść od razu na tymczasowych regułach z ich list. Osoba 3 i 4 dokładają własne funkcje, a tamci podmieniają tymczasowe wywołania w jednym małym PR.
