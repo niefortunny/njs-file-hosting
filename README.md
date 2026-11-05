@@ -2,7 +2,7 @@
 
 Szkielet anonimowego hostingu plików. Plik żyje 24 godziny, potem znika. Bez kont. Link jest jedynym hasłem.
 
-Frontend jest gotowy. Zapis na dysk i endpointy dopisujecie wy, każdy swoim pull requestem.
+Frontend jest gotowy. Zapis na dysk i endpointy dopisujemy każdy swoim pull requestem.
 
 ## Uruchomienie
 
@@ -11,8 +11,8 @@ npm install
 npm run dev
 ```
 
-[http://localhost:3000](http://localhost:3000) — formularz wrzucania.  
-[http://localhost:3000/f/test](http://localhost:3000/f/test) — strona pliku. Dopóki `getFile` zwraca `null`, widać komunikat o braku pliku.  
+[http://localhost:3000](http://localhost:3000) — formularz wrzucania.
+[http://localhost:3000/f/test](http://localhost:3000/f/test) — strona pliku. Dopóki `getFile` zwraca `null`, widać komunikat o braku pliku.
 `POST /api/upload` i `GET /api/files/test` zwracają `501`, więc formularz pokazuje „Niezaimplementowane.”
 
 ## Co już jest
