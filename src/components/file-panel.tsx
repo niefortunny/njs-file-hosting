@@ -8,17 +8,26 @@ import { useEffect, useState } from "react";
 const PREVIEW_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 export function FilePanel({ file }: { file: StoredFile }) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
+  const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    const tick = () => {
+      setOrigin(window.location.origin);
+      setNow(Date.now());
+    };
+    const start = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(timer);
+    };
   }, []);
 
-  const left = Date.parse(file.expiresAt) - now;
-  const shareLink = `${window.location.origin}/f/${file.id}`;
+  const left = now == null ? null : Date.parse(file.expiresAt) - now;
+  const shareLink = `${origin}/f/${file.id}`;
   const expires = new Date(file.expiresAt).toLocaleString("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -26,7 +35,7 @@ export function FilePanel({ file }: { file: StoredFile }) {
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(shareLink);
+      await navigator.clipboard.writeText(`${window.location.origin}/f/${file.id}`);
       setCopied(true);
       setCopyError(null);
     } catch {
@@ -41,7 +50,7 @@ export function FilePanel({ file }: { file: StoredFile }) {
         <h1 className="break-all text-3xl font-semibold tracking-tight">{file.name}</h1>
       </div>
 
-      {PREVIEW_TYPES.has(file.type) && left > 0 ? (
+      {PREVIEW_TYPES.has(file.type) && left != null && left > 0 ? (
         <div className="relative h-64 w-full overflow-hidden rounded-2xl border border-line">
           <Image
             src={`/api/files/${file.id}`}
@@ -59,7 +68,7 @@ export function FilePanel({ file }: { file: StoredFile }) {
         <dt className="text-muted">Znika</dt>
         <dd>{expires}</dd>
         <dt className="text-muted">Zostało</dt>
-        <dd>{formatRemaining(left)}</dd>
+        <dd>{left == null ? "…" : formatRemaining(left)}</dd>
       </dl>
 
       <div className="flex flex-wrap items-center gap-4">
